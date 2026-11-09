@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fujisaki Plc. | Business Simulation</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">F</div>
+        <div><strong>FUJISAKI PLC.</strong><span>Management simulation</span></div>
+      </div>
+      <div class="side-label">SIMULATION</div>
+      <button class="nav-item active" data-view="overview">▦ <span>Company overview</span></button>
+      <button class="nav-item" data-view="decisions">◇ <span>Decision room</span></button>
+      <button class="nav-item" data-view="financials">▤ <span>Financial statements</span></button>
+      <button class="nav-item" data-view="leaderboard">♜ <span>Leaderboard</span></button>
+      <div class="side-label instructor-label">FACULTY</div>
+      <button class="nav-item" data-view="instructor">⚙ <span>Instructor controls</span></button>
+      <div class="sidebar-foot"><span class="status-dot"></span> Simulation workspace</div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div><div class="eyebrow">STRATEGIC MANAGEMENT • FINANCE</div><h1 id="page-title">Company overview</h1></div>
+        <div class="top-actions">
+          <span class="year-chip" id="year-chip">YEAR 1 OF 6</span>
+          <button class="ghost-btn" id="reset-btn" title="Reset this browser's game data">Reset game</button>
+        </div>
+      </header>
+
+      <section class="view active" id="view-overview">
+        <div class="welcome-row">
+          <div><p class="eyebrow">WELCOME TO THE BOARDROOM</p><h2>Run the business.<br/><em>Own the outcome.</em></h2><p class="muted">Make strategic decisions, respond to market events and build long-term shareholder value.</p></div>
+          <div class="team-panel"><label for="team-name">YOUR MANAGEMENT TEAM</label><div class="team-input"><input id="team-name" maxlength="32" placeholder="Enter your team name"/><button id="save-team">Save</button></div><small>Use the same team name throughout the simulation.</small></div>
+        </div>
+
+        <div class="metric-grid">
+          <article class="metric-card"><div class="metric-top"><span>Revenue</span><span class="metric-icon">↗</span></div><strong id="metric-revenue">W$8.67m</strong><small id="revenue-change">Baseline annual revenue</small></article>
+          <article class="metric-card"><div class="metric-top"><span>Operating profit</span><span class="metric-icon">◈</span></div><strong id="metric-op">W$470k</strong><small>Operating performance</small></article>
+          <article class="metric-card"><div class="metric-top"><span>Cash balance</span><span class="metric-icon">◉</span></div><strong id="metric-cash">W$253k</strong><small>Available liquidity</small></article>
+          <article class="metric-card"><div class="metric-top"><span>Net debt</span><span class="metric-icon">⇄</span></div><strong id="metric-debt">W$1.25m</strong><small>Debt less cash</small></article>
+        </div>
+
+        <div class="content-grid">
+          <article class="panel journey-panel">
+            <div class="panel-heading"><div><p class="eyebrow">YOUR SIX-YEAR MANDATE</p><h3>Strategic journey</h3></div><span class="muted" id="progress-label">0 / 12 decisions</span></div>
+            <div class="year-track" id="year-track"></div>
+          </article>
+          <article class="panel next-panel">
+            <p class="eyebrow">NEXT BOARDROOM AGENDA</p><h3 id="next-title">Raw-material price shock</h3><p class="muted" id="next-desc">Input cost inflation is putting pressure on margins.</p>
+            <button class="primary-btn" data-goto="decisions">Enter decision room <span>→</span></button>
+          </article>
+        </div>
+        <div class="notice"><strong>Simulation note</strong><span>All financial amounts are illustrative and shown in W$000 unless otherwise stated. The instructor controls market conditions.</span></div>
+      </section>
+
+      <section class="view" id="view-decisions">
+        <div class="section-intro"><div><p class="eyebrow">YEARLY MANAGEMENT CHALLENGES</p><h2>Decision room</h2><p class="muted">Review the situation, debate the trade-offs and submit one decision for each challenge.</p></div><div class="round-select"><label for="round-select">YEAR</label><select id="round-select"><option value="0">Year 1</option><option value="1">Year 2</option><option value="2">Year 3</option><option value="3">Year 4</option><option value="4">Year 5</option><option value="5">Year 6</option></select></div></div>
+        <div id="decision-cards" class="decision-grid"></div>
+        <div class="decision-footer"><span class="muted" id="round-status">Choose an option for both situations.</span><button class="primary-btn" id="submit-round">Submit year decisions →</button></div>
+      </section>
+
+      <section class="view" id="view-financials">
+        <div class="section-intro"><div><p class="eyebrow">PERFORMANCE REPORTING</p><h2>Financial statements</h2><p class="muted">Track how management decisions flow through the business.</p></div><div class="round-select"><label for="financial-year">REPORTING YEAR</label><select id="financial-year"><option value="0">Year 1</option><option value="1">Year 2</option><option value="2">Year 3</option><option value="3">Year 4</option><option value="4">Year 5</option><option value="5">Year 6</option></select></div></div>
+        <div class="statement-grid">
+          <article class="panel"><div class="panel-heading"><h3>Income statement</h3><span class="unit">W$000</span></div><div id="income-table"></div></article>
+          <article class="panel"><div class="panel-heading"><h3>Financial position</h3><span class="unit">W$000</span></div><div id="balance-table"></div></article>
+        </div>
+        <article class="panel cash-panel"><div class="panel-heading"><h3>Cash & leverage indicators</h3><span class="unit">Selected year</span></div><div class="ratio-grid" id="ratio-grid"></div></article>
+      </section>
+
+      <section class="view" id="view-leaderboard">
+        <div class="section-intro"><div><p class="eyebrow">COMPETITIVE PERFORMANCE</p><h2>Leaderboard</h2><p class="muted">Compare teams by cumulative shareholder value and financial resilience.</p></div><span class="demo-tag">LOCAL DEMO</span></div>
+        <div class="panel"><div class="leaderboard-head"><span>RANK / TEAM</span><span>REVENUE</span><span>OPERATING PROFIT</span><span>CASH</span><span>DECISIONS</span></div><div id="leaderboard-rows"></div><p class="muted small">This prototype stores teams in the current browser only. A shared online leaderboard will be added with the database integration.</p></div>
+      </section>
+
+      <section class="view" id="view-instructor">
+        <div class="section-intro"><div><p class="eyebrow">FACULTY WORKSPACE</p><h2>Instructor controls</h2><p class="muted">Set market conditions before revealing outcomes to the teams.</p></div><span class="faculty-tag">INSTRUCTOR</span></div>
+        <div class="panel instructor-panel">
+          <div class="panel-heading"><div><h3>Market outcome settings</h3><p class="muted small">Select the market environment for each annual situation. Changes affect the financial engine.</p></div></div>
+          <div id="market-controls"></div>
+          <div class="instructor-actions"><button class="secondary-btn" id="save-market">Save market settings</button><button class="primary-btn" id="recalculate">Recalculate results →</button></div>
+        </div>
+        <div class="notice warning"><strong>Faculty-only area</strong><span>This prototype has no server-side authentication. Do not share the instructor view link as a secure control panel. Authentication and role permissions will be added in the hosted multiplayer version.</span></div>
+      </section>
+      <footer>FUJISAKI PLC. <span>Educational simulation prototype • v0.1</span></footer>
+    </main>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
