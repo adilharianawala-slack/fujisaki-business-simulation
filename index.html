@@ -29,6 +29,16 @@
         <label for="instructor-password">PASSWORD</label>
         <input id="instructor-password" type="password" autocomplete="current-password" placeholder="Your password" required />
         <button class="primary-btn auth-submit" type="submit">Sign in →</button>
+        <button type="button" id="forgot-password-btn" class="auth-link">Forgot password?</button>
+      </form>
+      <form id="password-reset-form" class="auth-form" hidden>
+        <p class="muted small">Choose a new password for your instructor account.</p>
+        <label for="new-instructor-password">NEW PASSWORD</label>
+        <input id="new-instructor-password" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" required />
+        <label for="confirm-instructor-password">CONFIRM NEW PASSWORD</label>
+        <input id="confirm-instructor-password" type="password" autocomplete="new-password" minlength="8" placeholder="Enter the password again" required />
+        <button class="primary-btn auth-submit" type="submit">Save new password →</button>
+        <button type="button" id="cancel-password-reset" class="auth-link">Back to instructor login</button>
       </form>
       <p id="auth-message" class="auth-message" role="status"></p>
       <p class="auth-footnote">Each team must use its own access code. Do not share codes between teams.</p>

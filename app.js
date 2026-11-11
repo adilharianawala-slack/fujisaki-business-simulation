@@ -468,7 +468,79 @@ async function startInstructorLogin(email, password) {
   showToast("Instructor signed in");
 }
 
+
+function showPasswordResetForm(showReset) {
+  document.getElementById("instructor-login-form").hidden = !!showReset;
+  document.getElementById("student-login-form").hidden = true;
+  document.getElementById("password-reset-form").hidden = !showReset;
+  document.getElementById("show-student-login").classList.remove("active");
+  document.getElementById("show-instructor-login").classList.add("active");
+  authMessage("");
+}
+
+async function sendInstructorPasswordReset() {
+  const email = document.getElementById("instructor-email").value.trim();
+  if (!email) {
+    authMessage("Enter your instructor email first.");
+    document.getElementById("instructor-email").focus();
+    return;
+  }
+
+  authMessage("Sending password reset email…", true);
+  const redirectTo = `${window.location.origin}${window.location.pathname}`;
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
+  if (error) throw error;
+  authMessage("Password reset email sent. Open the newest email on this device, then choose your new password here.", true);
+}
+
+async function saveInstructorNewPassword(event) {
+  event.preventDefault();
+  const password = document.getElementById("new-instructor-password").value;
+  const confirm = document.getElementById("confirm-instructor-password").value;
+
+  if (password.length < 8) {
+    authMessage("Choose a password with at least 8 characters.");
+    return;
+  }
+  if (password !== confirm) {
+    authMessage("The two passwords do not match.");
+    return;
+  }
+
+  authMessage("Updating your password…", true);
+  const { error } = await supabaseClient.auth.updateUser({ password });
+  if (error) throw error;
+
+  await supabaseClient.auth.signOut();
+  document.getElementById("password-reset-form").reset();
+  document.getElementById("instructor-login-form").reset();
+  showPasswordResetForm(false);
+  authMessage("Your password has been updated. Sign in using your new password.", true);
+}
+
 function installAuthHandlers() {
+  document.getElementById("forgot-password-btn").addEventListener("click", async () => {
+    try {
+      await sendInstructorPasswordReset();
+    } catch (error) {
+      console.error(error);
+      authMessage(error.message || "Could not send the password reset email.");
+    }
+  });
+
+  document.getElementById("cancel-password-reset").addEventListener("click", () => {
+    showPasswordResetForm(false);
+  });
+
+  document.getElementById("password-reset-form").addEventListener("submit", async event => {
+    try {
+      await saveInstructorNewPassword(event);
+    } catch (error) {
+      console.error(error);
+      authMessage(error.message || "Could not update your password.");
+    }
+  });
+
   document.getElementById("show-student-login").addEventListener("click", () => switchAuthMode("student"));
   document.getElementById("show-instructor-login").addEventListener("click", () => switchAuthMode("instructor"));
 
@@ -557,6 +629,15 @@ document.getElementById("submit-round").addEventListener("click", () => {
         }
       }
     );
+
+    // Supabase redirects password-recovery links back to this page.
+    // Show the password form when the recovery session is detected.
+    supabaseClient.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        showPasswordResetForm(true);
+        authMessage("Recovery link verified. Enter and confirm your new password below.", true);
+      }
+    });
 
     installAuthHandlers();
     await inspectExistingSession();

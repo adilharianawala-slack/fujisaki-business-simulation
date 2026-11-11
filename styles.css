@@ -27,3 +27,6 @@
 #signout-btn{font-size:10px}
 .team-input input[readonly]{background:#f5f8f9;color:#667987}
 @media(max-width:650px){.auth-card{padding:25px 20px}.auth-card h1{font-size:23px}.session-chip{display:none}}
+
+.auth-link{border:0;background:transparent;color:var(--teal);font:600 12px 'DM Sans';cursor:pointer;padding:8px;margin-top:2px}
+.auth-link:hover{text-decoration:underline}
