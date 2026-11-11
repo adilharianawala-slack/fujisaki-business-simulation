@@ -7,6 +7,34 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+
+  <section id="auth-gate" class="auth-gate">
+    <div class="auth-card">
+      <div class="brand-mark auth-brand-mark">F</div>
+      <p class="eyebrow">FUJISAKI PLC. • MANAGEMENT SIMULATION</p>
+      <h1>Welcome to the boardroom</h1>
+      <p class="muted auth-intro">Sign in as an instructor or join your team's simulation using its access code.</p>
+      <div class="auth-tabs">
+        <button type="button" id="show-student-login" class="auth-tab active">Team access</button>
+        <button type="button" id="show-instructor-login" class="auth-tab">Instructor</button>
+      </div>
+      <form id="student-login-form" class="auth-form">
+        <label for="team-code">TEAM ACCESS CODE</label>
+        <input id="team-code" type="password" inputmode="text" autocomplete="off" maxlength="32" placeholder="Enter your 32-character team code" required />
+        <button class="primary-btn auth-submit" type="submit">Join simulation →</button>
+      </form>
+      <form id="instructor-login-form" class="auth-form" hidden>
+        <label for="instructor-email">INSTRUCTOR EMAIL</label>
+        <input id="instructor-email" type="email" autocomplete="username" placeholder="Your instructor email" required />
+        <label for="instructor-password">PASSWORD</label>
+        <input id="instructor-password" type="password" autocomplete="current-password" placeholder="Your password" required />
+        <button class="primary-btn auth-submit" type="submit">Sign in →</button>
+      </form>
+      <p id="auth-message" class="auth-message" role="status"></p>
+      <p class="auth-footnote">Each team must use its own access code. Do not share codes between teams.</p>
+    </div>
+  </section>
+
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
@@ -28,6 +56,8 @@
         <div><div class="eyebrow">STRATEGIC MANAGEMENT • FINANCE</div><h1 id="page-title">Company overview</h1></div>
         <div class="top-actions">
           <span class="year-chip" id="year-chip">YEAR 1 OF 6</span>
+          <span class="session-chip" id="session-label"></span>
+          <button class="ghost-btn" id="signout-btn" type="button">Sign out</button>
           <button class="ghost-btn" id="reset-btn" title="Reset this browser's game data">Reset game</button>
         </div>
       </header>
@@ -79,7 +109,7 @@
       </section>
 
       <section class="view" id="view-instructor">
-        <div class="section-intro"><div><p class="eyebrow">FACULTY WORKSPACE</p><h2>Instructor controls</h2><p class="muted">Set market conditions before revealing outcomes to the teams.</p></div><span class="faculty-tag">INSTRUCTOR</span></div>
+        <div class="section-intro"><div><p class="eyebrow">FACULTY WORKSPACE</p><h2>Instructor controls</h2><p class="muted">Instructor-only workspace. Team authentication and decision access are connected to Supabase; shared market-outcome publishing is the next integration stage.</p></div><span class="faculty-tag">INSTRUCTOR</span></div>
         <div class="panel instructor-panel">
           <div class="panel-heading"><div><h3>Market outcome settings</h3><p class="muted small">Select the market environment for each annual situation. Changes affect the financial engine.</p></div></div>
           <div id="market-controls"></div>
@@ -91,6 +121,7 @@
     </main>
   </div>
   <div class="toast" id="toast"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -114,3 +114,454 @@ document.getElementById("save-market").addEventListener("click",()=>{document.qu
 document.getElementById("recalculate").addEventListener("click",()=>{document.querySelectorAll("[data-market]").forEach(el=>state.market[el.dataset.market]=el.value);save();renderOverview();showToast("Financial results recalculated")});
 document.getElementById("reset-btn").addEventListener("click",()=>{if(confirm("Reset all decisions, market settings and team name stored in this browser?")){localStorage.removeItem("fujisaki_v1");state=loadState();renderOverview();showToast("Game reset") }});
 renderOverview();
+
+
+// -----------------------------------------------------------------------------
+// Supabase authentication and team-scoped decision synchronisation.
+// Configure the two public values below before publishing this build.
+// Never place a Supabase secret key in this file.
+// -----------------------------------------------------------------------------
+const FUJISAKI_SUPABASE_URL = "https://bvqbjtmppewzwsbrandk.supabase.co";
+const FUJISAKI_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_ad6jmfJ4S5EIJQYQFCC9Kw_-1fkfo5X";
+
+let supabaseClient = null;
+let signedInRole = null;
+let activeTeamId = null;
+let activeTeamName = null;
+let activeUserId = null;
+let dbSituationIds = new Map();
+let syncQueue = Promise.resolve();
+let currentStorageKey = "fujisaki_v1";
+
+function authMessage(message, success = false) {
+  const el = document.getElementById("auth-message");
+  if (!el) return;
+  el.textContent = message || "";
+  el.classList.toggle("success", !!success);
+}
+
+function switchAuthMode(mode) {
+  const student = mode === "student";
+  document.getElementById("student-login-form").hidden = !student;
+  document.getElementById("instructor-login-form").hidden = student;
+  document.getElementById("show-student-login").classList.toggle("active", student);
+  document.getElementById("show-instructor-login").classList.toggle("active", !student);
+  authMessage("");
+}
+
+function showGame(role, label) {
+  signedInRole = role;
+  document.getElementById("auth-gate").style.display = "none";
+  document.getElementById("session-label").textContent = label || "";
+  document.getElementById("signout-btn").style.display = "inline-flex";
+  document.querySelectorAll(".instructor-label, [data-view='instructor']").forEach(el => {
+    el.style.display = role === "instructor" ? "" : "none";
+  });
+
+  const teamInput = document.getElementById("team-name");
+  const saveTeam = document.getElementById("save-team");
+  if (role === "student") {
+    teamInput.value = activeTeamName || "Your team";
+    teamInput.readOnly = true;
+    saveTeam.disabled = true;
+    saveTeam.style.display = "none";
+    state.team = activeTeamName || "Your team";
+  } else {
+    teamInput.readOnly = false;
+    saveTeam.disabled = false;
+    saveTeam.style.display = "";
+  }
+
+  renderOverview();
+  if (role === "student") {
+    refreshRoundAvailability();
+    renderDecisions();
+    renderFinancials();
+    renderLeaderboard();
+  }
+}
+
+function loadTeamLocalState(teamId) {
+  currentStorageKey = `fujisaki_v1_team_${teamId}`;
+  try {
+    const saved = JSON.parse(localStorage.getItem(currentStorageKey));
+    state = saved || { team: activeTeamName || "", decisions: {}, market: {}, submitted: {}, history: [] };
+  } catch (_) {
+    state = { team: activeTeamName || "", decisions: {}, market: {}, submitted: {}, history: [] };
+  }
+}
+
+function saveTeamLocalState() {
+  localStorage.setItem(currentStorageKey, JSON.stringify(state));
+}
+
+async function fetchSituationMap() {
+  const { data, error } = await supabaseClient
+    .from("situations")
+    .select("id, year_number, situation_number, title")
+    .order("year_number", { ascending: true })
+    .order("situation_number", { ascending: true });
+
+  if (error) throw error;
+
+  dbSituationIds = new Map();
+  const grouped = new Map();
+  (data || []).forEach(row => {
+    const y = Number(row.year_number) - 1;
+    if (!grouped.has(y)) grouped.set(y, []);
+    grouped.get(y).push(row);
+  });
+
+  for (let y = 0; y < 6; y++) {
+    const rows = grouped.get(y) || [];
+    rows.sort((a, b) => Number(a.situation_number) - Number(b.situation_number));
+    rows.slice(0, 2).forEach((row, s) => {
+      dbSituationIds.set(`${y}-${s}`, row.id);
+    });
+  }
+
+  for (let y = 0; y < 6; y++) {
+    if (!dbSituationIds.has(`${y}-0`) || !dbSituationIds.has(`${y}-1`)) {
+      throw new Error(`Supabase is missing one or more situation records for Year ${y + 1}.`);
+    }
+  }
+}
+
+async function loadStudentContext(user) {
+  activeUserId = user.id;
+  const { data: membership, error: memberError } = await supabaseClient
+    .from("team_members")
+    .select("team_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (memberError) throw memberError;
+  if (!membership) return false;
+
+  activeTeamId = membership.team_id;
+
+  const { data: team, error: teamError } = await supabaseClient
+    .from("teams")
+    .select("id, team_number, team_name")
+    .eq("id", activeTeamId)
+    .single();
+
+  if (teamError) throw teamError;
+  activeTeamName = team.team_name || `Team ${team.team_number}`;
+
+  loadTeamLocalState(activeTeamId);
+  await fetchSituationMap();
+
+  const { data: decisions, error: decisionError } = await supabaseClient
+    .from("decisions")
+    .select("situation_id, year_number, selected_option, rationale, submitted_at")
+    .eq("team_id", activeTeamId);
+
+  if (decisionError) throw decisionError;
+
+  // Server data is authoritative; do not reuse decisions from another browser/team.
+  state.decisions = {};
+  state.submitted = {};
+
+  (decisions || []).forEach(row => {
+    const y = Number(row.year_number) - 1;
+    const situationIndex = dbSituationIds.get(`${y}-0`) === row.situation_id ? 0 :
+      dbSituationIds.get(`${y}-1`) === row.situation_id ? 1 : -1;
+    if (situationIndex < 0) return;
+    const option = String(row.selected_option || "A").toUpperCase().charCodeAt(0) - 65;
+    state.decisions[`${y}-${situationIndex}`] = {
+      choice: Math.max(0, Math.min(3, option)),
+      rationale: row.rationale || ""
+    };
+  });
+
+  for (let y = 0; y < 6; y++) {
+    const a = (decisions || []).find(r => r.situation_id === dbSituationIds.get(`${y}-0`));
+    const b = (decisions || []).find(r => r.situation_id === dbSituationIds.get(`${y}-1`));
+    if (a?.submitted_at && b?.submitted_at) state.submitted[y] = true;
+  }
+
+  saveTeamLocalState();
+  await refreshRoundAvailability();
+  return true;
+}
+
+async function refreshRoundAvailability() {
+  const { data, error } = await supabaseClient
+    .from("rounds")
+    .select("year_number, round_status")
+    .order("year_number", { ascending: true });
+
+  if (error) throw error;
+
+  const select = document.getElementById("round-select");
+  if (select) {
+    (data || []).forEach(round => {
+      const option = select.querySelector(`option[value="${Number(round.year_number) - 1}"]`);
+      if (option) {
+        option.disabled = signedInRole === "student" && String(round.round_status).toLowerCase() !== "open";
+      }
+    });
+    const firstOpen = (data || []).find(r => String(r.round_status).toLowerCase() === "open");
+    if (firstOpen) select.value = String(Number(firstOpen.year_number) - 1);
+  }
+}
+
+async function persistDecision(yearIndex, situationIndex) {
+  if (signedInRole !== "student" || !activeTeamId || !activeUserId) return;
+  const decision = getDecision(yearIndex, situationIndex);
+  if (!decision) return;
+
+  const situationId = dbSituationIds.get(`${yearIndex}-${situationIndex}`);
+  if (!situationId) return;
+
+  const payload = {
+    team_id: activeTeamId,
+    situation_id: situationId,
+    year_number: yearIndex + 1,
+    selected_option: String.fromCharCode(65 + decision.choice),
+    rationale: decision.rationale || ""
+  };
+  if (state.submitted[yearIndex]) {
+    payload.submitted_at = new Date().toISOString();
+  }
+
+  syncQueue = syncQueue.then(async () => {
+    const { data: existing, error: findError } = await supabaseClient
+      .from("decisions")
+      .select("id")
+      .eq("team_id", activeTeamId)
+      .eq("situation_id", situationId)
+      .maybeSingle();
+
+    if (findError) throw findError;
+
+    if (existing) {
+      const { error } = await supabaseClient
+        .from("decisions")
+        .update({
+          selected_option: payload.selected_option,
+          rationale: payload.rationale,
+          ...(payload.submitted_at ? { submitted_at: payload.submitted_at } : {}),
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", existing.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabaseClient.from("decisions").insert(payload);
+      if (error) throw error;
+    }
+  }).catch(error => {
+    console.error("Decision synchronisation failed:", error);
+    showToast(error.message || "Could not sync decision to the server");
+  });
+
+  return syncQueue;
+}
+
+async function syncAllDecisions() {
+  if (signedInRole !== "student" || !activeTeamId) return;
+  for (let y = 0; y < 6; y++) {
+    for (let s = 0; s < 2; s++) {
+      if (getDecision(y, s)) await persistDecision(y, s);
+    }
+  }
+}
+
+async function inspectExistingSession() {
+  const { data: sessionData, error } = await supabaseClient.auth.getSession();
+  if (error) throw error;
+  const session = sessionData.session;
+  if (!session) return;
+
+  const { data: userData, error: userError } = await supabaseClient.auth.getUser();
+  if (userError || !userData.user) {
+    await supabaseClient.auth.signOut();
+    return;
+  }
+
+  const user = userData.user;
+  const { data: profile, error: profileError } = await supabaseClient
+    .from("profiles")
+    .select("role, display_name")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (profileError) throw profileError;
+
+  if (profile?.role === "instructor" && user.is_anonymous !== true) {
+    activeUserId = user.id;
+    showGame("instructor", profile.display_name || "Instructor");
+    return;
+  }
+
+  if (user.is_anonymous === true) {
+    const joined = await loadStudentContext(user);
+    if (joined) showGame("student", activeTeamName);
+    else switchAuthMode("student");
+  }
+}
+
+async function startStudentLogin(code) {
+  authMessage("Creating your secure student session…", true);
+
+  const { data: sessionData, error: sessionError } = await supabaseClient.auth.getSession();
+  if (sessionError) throw sessionError;
+
+  let session = sessionData.session;
+  if (session && !session.user.is_anonymous) {
+    await supabaseClient.auth.signOut();
+    session = null;
+  }
+
+  if (!session) {
+    const { data, error } = await supabaseClient.auth.signInAnonymously();
+    if (error) throw error;
+    session = data.session;
+  }
+
+  if (!session) throw new Error("Supabase did not create a student session.");
+
+  authMessage("Checking your team access code…", true);
+  const { data: joined, error: joinError } = await supabaseClient.functions.invoke(
+    "join-team",
+    { body: { code } }
+  );
+
+  if (joinError) {
+    const details = joinError.context?.json?.error || joinError.message;
+    throw new Error(details || "Team code validation failed.");
+  }
+  if (!joined?.success) throw new Error(joined?.error || "Team code validation failed.");
+
+  const user = session.user;
+  const loaded = await loadStudentContext(user);
+  if (!loaded) throw new Error("Your team membership was not created. Please contact the instructor.");
+
+  showGame("student", `${joined.team_name} · Student`);
+  showToast(`Welcome to ${joined.team_name}`);
+}
+
+async function startInstructorLogin(email, password) {
+  authMessage("Signing in…", true);
+  const { data, error } = await supabaseClient.auth.signInWithPassword({
+    email,
+    password
+  });
+  if (error) throw error;
+
+  const { data: profile, error: profileError } = await supabaseClient
+    .from("profiles")
+    .select("role, display_name")
+    .eq("user_id", data.user.id)
+    .maybeSingle();
+
+  if (profileError) throw profileError;
+
+  if (!profile || profile.role !== "instructor") {
+    await supabaseClient.auth.signOut();
+    throw new Error("This account is not marked as an instructor yet. The instructor profile must be promoted in Supabase first.");
+  }
+
+  activeUserId = data.user.id;
+  showGame("instructor", profile.display_name || "Instructor");
+  showToast("Instructor signed in");
+}
+
+function installAuthHandlers() {
+  document.getElementById("show-student-login").addEventListener("click", () => switchAuthMode("student"));
+  document.getElementById("show-instructor-login").addEventListener("click", () => switchAuthMode("instructor"));
+
+  document.getElementById("student-login-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    const code = document.getElementById("team-code").value.trim().toLowerCase();
+    if (!/^[a-f0-9]{32}$/.test(code)) {
+      authMessage("Enter the 32-character team access code supplied by your instructor.");
+      return;
+    }
+    try {
+      await startStudentLogin(code);
+    } catch (error) {
+      console.error(error);
+      authMessage(error.message || "Unable to join the simulation.");
+    }
+  });
+
+  document.getElementById("instructor-login-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    try {
+      await startInstructorLogin(
+        document.getElementById("instructor-email").value.trim(),
+        document.getElementById("instructor-password").value
+      );
+    } catch (error) {
+      console.error(error);
+      authMessage(error.message || "Instructor sign-in failed.");
+    }
+  });
+
+  document.getElementById("signout-btn").addEventListener("click", async () => {
+    await supabaseClient.auth.signOut();
+    location.reload();
+  });
+}
+
+// Replace local-only save with team-namespaced local backup plus cloud sync.
+const originalLocalSave = save;
+save = function() {
+  if (signedInRole === "student") {
+    saveTeamLocalState();
+    syncAllDecisions();
+  } else {
+    originalLocalSave();
+  }
+};
+
+// Keep the selected team data namespaced, not shared with another team in the same browser.
+document.getElementById("submit-round").addEventListener("click", () => {
+  if (signedInRole === "student") {
+    const y = selectedRound();
+    if (getDecision(y, 0) && getDecision(y, 1)) {
+      state.submitted[y] = true;
+      saveTeamLocalState();
+      syncAllDecisions();
+    }
+  }
+});
+
+(async function initialiseFujisakiSupabase() {
+  const gate = document.getElementById("auth-gate");
+
+  if (
+    FUJISAKI_SUPABASE_URL.includes("PASTE_") ||
+    FUJISAKI_SUPABASE_PUBLISHABLE_KEY.includes("PASTE_")
+  ) {
+    authMessage("Website setup required: add your Supabase Project URL and publishable key in app.js.");
+    return;
+  }
+
+  if (!window.supabase?.createClient) {
+    authMessage("Supabase library did not load. Refresh the page or check your internet connection.");
+    return;
+  }
+
+  try {
+    supabaseClient = window.supabase.createClient(
+      FUJISAKI_SUPABASE_URL,
+      FUJISAKI_SUPABASE_PUBLISHABLE_KEY,
+      {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true
+        }
+      }
+    );
+
+    installAuthHandlers();
+    await inspectExistingSession();
+  } catch (error) {
+    console.error("Supabase initialisation error:", error);
+    authMessage(error.message || "Could not connect to Supabase.");
+  }
+})();
