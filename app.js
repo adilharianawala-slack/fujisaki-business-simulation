@@ -132,6 +132,7 @@ let activeUserId = null;
 let dbSituationIds = new Map();
 let syncQueue = Promise.resolve();
 let currentStorageKey = "fujisaki_v1";
+let passwordRecoveryInProgress = false;
 
 function authMessage(message, success = false) {
   const el = document.getElementById("auth-message");
@@ -150,6 +151,7 @@ function switchAuthMode(mode) {
 }
 
 function showGame(role, label) {
+  if (passwordRecoveryInProgress) return;
   signedInRole = role;
   document.getElementById("auth-gate").style.display = "none";
   document.getElementById("session-label").textContent = label || "";
@@ -369,7 +371,9 @@ async function syncAllDecisions() {
 }
 
 async function inspectExistingSession() {
+  if (passwordRecoveryInProgress) return;
   const { data: sessionData, error } = await supabaseClient.auth.getSession();
+  if (passwordRecoveryInProgress) return;
   if (error) throw error;
   const session = sessionData.session;
   if (!session) return;
@@ -511,6 +515,7 @@ async function saveInstructorNewPassword(event) {
   const { error } = await supabaseClient.auth.updateUser({ password });
   if (error) throw error;
 
+  passwordRecoveryInProgress = false;
   await supabaseClient.auth.signOut();
   document.getElementById("password-reset-form").reset();
   document.getElementById("instructor-login-form").reset();
@@ -634,6 +639,11 @@ document.getElementById("submit-round").addEventListener("click", () => {
     // Show the password form when the recovery session is detected.
     supabaseClient.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
+        // Do not let the valid recovery session auto-enter the simulation.
+        // Keep the login gate visible until the instructor chooses a new password.
+        passwordRecoveryInProgress = true;
+        signedInRole = null;
+        document.getElementById("auth-gate").style.display = "grid";
         showPasswordResetForm(true);
         authMessage("Recovery link verified. Enter and confirm your new password below.", true);
       }
